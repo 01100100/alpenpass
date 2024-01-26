@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Alpine passes</title>
+  <!-- Metadata -->
+  <meta property="og:description" content="Get hyped for the next alpine adventure." />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- External stylesheets and scripts -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+  <!-- Inline styling -->
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+
+    #map {
+      flex-grow: 1;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Map container -->
+  <div id="map">
+  </div>
+
+  <script>
+    const passesGeoJson = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "id": 1,
+          "type": "Feature",
+          "properties": { "name": "test_pass" },
+          "geometry": {
+            "coordinates": [
+              [
+                14.359532394583482,
+                47.562200874166194
+              ],
+              [
+                13.844124131376532,
+                47.51258575641654
+              ],
+              [
+                13.549701062023274,
+                47.24762989085585
+              ],
+              [
+                13.53073077470603,
+                47.285586509986615
+              ],
+              [
+                12.902540554639955,
+                47.297740100074805
+              ]
+            ],
+            "type": "LineString"
+          }
+        }
+      ]
+    }
+    const mapInstance = createMap();
+    displayRoute(passesGeoJson);
+
+    function createMap() {
+      return new maplibregl.Map({
+        container: "map",
+        style:
+          "https://api.maptiler.com/maps/topo-v2/style.json?key=ykqGqGPMAYuYgedgpBOY",
+        center: [10.469660, 46.854892], // Dreiländerecke 
+        zoom: 8,
+      });
+    }
+    function displayRoute(geoJson) {
+      // First, ensure the map instance is loaded before adding sources or layers.
+      mapInstance.on('load', () => {
+        mapInstance.addSource("passes", { type: "geojson", data: geoJson });
+        mapInstance.addLayer({
+          id: "passes",
+          type: "line",
+          source: "passes",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#fc03ca",
+            "line-opacity": [
+              "case",
+              ["boolean", ["feature-state", "hover"], false],
+              1,
+              0.6,
+            ],
+            "line-width": 5
+          },
+        });
+
+        // Create a popup but don't add it to the map yet
+        const popup = new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: false,
+        });
+
+        // Initialize hoveredFeatureId outside of event handlers
+        let hoveredFeatureId = null;
+
+        let clickedFeatureId = null; // Variable to store the ID of the clicked feature
+
+        // Show popup on 'click' event
+        mapInstance.on("click", "passes", (e) => {
+          if (e.features.length > 0) {
+            if (clickedFeatureId !== e.features[0].id) {
+              const passName = e.features[0].properties.name || 'Unnamed'; // Default to 'Unnamed' if name is not provided
+              const coordinates = e.lngLat;
+              const popupContent = `${passName}`;
+
+              popup.setLngLat(coordinates).setHTML(popupContent).addTo(mapInstance);
+              clickedFeatureId = e.features[0].id; // Update clickedFeatureId
+            }
+          }
+        });
+
+        // Remove the popup when the map is clicked outside any feature
+        mapInstance.on("click", (e) => {
+          if (!e.defaultPrevented) { // Check that the click was not on a feature
+            if (clickedFeatureId !== null) {
+              popup.remove();
+              clickedFeatureId = null; // Reset clickedFeatureId
+            }
+          }
+        });
+
+        // Prevent the map click event from firing when a feature is clicked
+        mapInstance.on("click", "passes", (e) => {
+          e.preventDefault();
+        });
+
+        // Show popup on mouseenter event
+        mapInstance.on("mouseenter", "passes", (e) => {
+          if (e.features.length > 0) {
+            const passName = e.features[0].properties.name || 'Unnamed'; // Default to 'Unnamed' if name is not provided
+            const coordinates = e.lngLat;
+            const popupContent = `${passName}`;
+
+            popup.setLngLat(coordinates).setHTML(popupContent).addTo(mapInstance);
+
+            // Set feature state for hover - ensuring it exists
+            hoveredFeatureId = e.features[0].id || null; // Assume features have IDs or nullify
+            if (hoveredFeatureId !== null) {
+              mapInstance.setFeatureState(
+                { source: "passes", id: hoveredFeatureId },
+                { hover: true }
+              );
+            }
+          }
+        });
+
+        // Hide popup on mouseleave event
+        mapInstance.on("mouseleave", "passes", () => {
+          popup.remove();
+          if (hoveredFeatureId !== null) {
+            mapInstance.setFeatureState(
+              { source: "passes", id: hoveredFeatureId },
+              { hover: false }
+            );
+          }
+          hoveredFeatureId = null;
+        });
+
+        // Update popup location on mousemove event
+        mapInstance.on("mousemove", "passes", (e) => {
+          if (e.features.length > 0) {
+            const coordinates = e.lngLat;
+            popup.setLngLat(coordinates);
+
+            const newHoveredFeatureId = e.features[0].id || null;
+            if (newHoveredFeatureId !== hoveredFeatureId) {
+              if (hoveredFeatureId !== null) {
+                // Remove previous hover state
+                mapInstance.setFeatureState(
+                  { source: "passes", id: hoveredFeatureId },
+                  { hover: false }
+                );
+              }
+              if (newHoveredFeatureId !== null) {
+                // Set new hover state
+                mapInstance.setFeatureState(
+                  { source: "passes", id: newHoveredFeatureId },
+                  { hover: true }
+                );
+              }
+              // Update hoveredFeatureId
+              hoveredFeatureId = newHoveredFeatureId;
+            }
+          }
+        });
+
+
+        // Change the cursor to a pointer when the mouse is over the passes layer.
+        mapInstance.on('mouseenter', 'passes', () => {
+          mapInstance.getCanvas().style.cursor = 'pointer';
+        });
+
+        // Change it back to a pointer when it leaves.
+        mapInstance.on('mouseleave', 'passes', () => {
+          mapInstance.getCanvas().style.cursor = '';
+        });
+
+      });
+    }
+
+  </script>
+</body>
+
+</html>
